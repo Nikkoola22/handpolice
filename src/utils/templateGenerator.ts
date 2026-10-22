@@ -1,4 +1,4 @@
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import { CharacterItem, TemplateCell } from '../types';
 
 export interface TemplateConfig {
