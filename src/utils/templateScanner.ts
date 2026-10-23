@@ -8,24 +8,29 @@ export interface ScannedGlyphResult {
 }
 
 /**
- * Traite une image scannée ou photographiée d'une feuille gabarit.
+ * Traite une image scannée, un canvas ou une page PDF d'une feuille gabarit.
  * Découpe chaque case, nettoie le bruit et les lignes de repères,
  * et extrait les glyphes individuels.
  */
 export async function processScannedTemplate(
-  imageSource: HTMLImageElement | File,
+  imageSource: HTMLImageElement | HTMLCanvasElement | File,
   templateCells: TemplateCell[],
   threshold: number = 150
 ): Promise<ScannedGlyphResult[]> {
-  const img = await loadImage(imageSource);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || img.width;
-  canvas.height = img.naturalHeight || img.height;
+  let canvas: HTMLCanvasElement;
+  if (imageSource instanceof HTMLCanvasElement) {
+    canvas = imageSource;
+  } else {
+    const img = await loadImage(imageSource);
+    canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
 
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Impossible d\'initialiser le contexte canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error("Impossible d'initialiser le contexte canvas");
 
-  ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0);
+  }
 
   const results: ScannedGlyphResult[] = [];
 
@@ -91,13 +96,57 @@ export async function processScannedTemplate(
 
     cellCtx.putImageData(imgData, 0, 0);
 
+    // Détection des bornes de l'encre pour éliminer les marges blanches et lier les lettres en cursive
+    let inkMinX = cropW;
+    let inkMaxX = 0;
+
+    for (let y = 0; y < cropH; y++) {
+      for (let x = 0; x < cropW; x++) {
+        const idx = (y * cropW + x) * 4;
+        if (d[idx + 3] > 0) {
+          if (x < inkMinX) inkMinX = x;
+          if (x > inkMaxX) inkMaxX = x;
+        }
+      }
+    }
+
     // Si plus de 30 pixels d'encre sont détectés, on considère que la case est remplie
-    const hasContent = darkPixelCount > 30;
+    const hasContent = darkPixelCount > 30 && inkMinX < inkMaxX;
+    let finalDataUrl = cellCanvas.toDataURL('image/png');
+
+    if (hasContent) {
+      // Recadrage horizontal serré autour de l'encre pour permettre la continuité cursive sans rupture
+      const padding = 2;
+      const trimStartX = Math.max(0, inkMinX - padding);
+      const trimEndX = Math.min(cropW, inkMaxX + padding);
+      const trimWidth = trimEndX - trimStartX;
+
+      if (trimWidth > 5) {
+        const trimmedCanvas = document.createElement('canvas');
+        trimmedCanvas.width = trimWidth;
+        trimmedCanvas.height = cropH; // Conserve la hauteur complète pour caler la ligne de base
+        const trimmedCtx = trimmedCanvas.getContext('2d');
+        if (trimmedCtx) {
+          trimmedCtx.drawImage(
+            cellCanvas,
+            trimStartX,
+            0,
+            trimWidth,
+            cropH,
+            0,
+            0,
+            trimWidth,
+            cropH
+          );
+          finalDataUrl = trimmedCanvas.toDataURL('image/png');
+        }
+      }
+    }
 
     results.push({
       char: cell.char,
       name: cell.name,
-      dataUrl: cellCanvas.toDataURL('image/png'),
+      dataUrl: finalDataUrl,
       hasContent,
     });
   }

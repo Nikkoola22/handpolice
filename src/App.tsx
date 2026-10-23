@@ -120,7 +120,7 @@ export function App() {
             strokes: [],
             bitmapDataUrl: dataUrl,
             leftMargin: 0,
-            rightMargin: -5,
+            rightMargin: -8,
             baselineOffset: 0,
             scale: 1,
             createdAt: Date.now(),
@@ -135,6 +135,20 @@ export function App() {
     );
 
     setActiveTab('grid');
+  };
+
+  // Calibrer toutes les marges pour liaison cursive continue sans trou
+  const handleCalibrateAllCursive = () => {
+    setCharacters((prev) =>
+      prev.map((c) => ({
+        ...c,
+        variants: c.variants.map((v) => ({
+          ...v,
+          leftMargin: 0,
+          rightMargin: -8,
+        })),
+      }))
+    );
   };
 
   // Gestion des ligatures
@@ -196,6 +210,7 @@ export function App() {
               setSelectedCharacterId(charId);
               setActiveTab('draw');
             }}
+            onCalibrateAllCursive={handleCalibrateAllCursive}
           />
         )}
 

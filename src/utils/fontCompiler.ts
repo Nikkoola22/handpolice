@@ -1,20 +1,24 @@
 import opentype from 'opentype.js';
-import { CharacterItem, FontMetadata, LigatureItem } from '../types';
-import { strokesToOutlinePath, bitmapToOutlinePath } from './vectorizer';
+import { CharacterItem, LigatureItem, FontMetadata } from '../types';
+import { strokesToOutlinePath } from './vectorizer';
+import { bitmapToOutlinePath } from './vectorizer';
 
-export function compileFont(
+/**
+ * Compile l'ensemble des caractères dessinés et ligatures en une police OpenType/TTF valide
+ */
+export async function compileOpenTypeFont(
   characters: CharacterItem[],
-  ligatures: LigatureItem[] = [],
+  ligatures: LigatureItem[],
   metadata: FontMetadata
-): opentype.Font {
-  const unitsPerEm = metadata.unitsPerEm || 1000;
-  const ascender = metadata.ascender || 800;
-  const descender = metadata.descender || -200;
+): Promise<opentype.Font> {
+  const unitsPerEm = 1000;
+  const ascender = 800;
+  const descender = -200;
 
-  // 1. Glyphe standard non défini (.notdef) obligatoire dans toute police
+  // 1. Glyphe obligatoire .notdef (rectangle barré)
   const notdefPath = new opentype.Path();
-  const boxWidth = Math.round(unitsPerEm * 0.5);
-  const boxHeight = Math.round(unitsPerEm * 0.7);
+  const boxWidth = 300;
+  const boxHeight = 700;
   notdefPath.moveTo(50, 0);
   notdefPath.lineTo(boxWidth, 0);
   notdefPath.lineTo(boxWidth, boxHeight);
@@ -56,12 +60,17 @@ export function compileFont(
         rightMargin: variant.rightMargin,
       });
     } else if (variant.bitmapDataUrl) {
-      // Pour les glyphes scannés
+      // Pour les glyphes scannés / importés
       const img = new Image();
-      img.src = variant.bitmapDataUrl;
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = variant.bitmapDataUrl!;
+      });
+
       const cvs = document.createElement('canvas');
-      cvs.width = img.width || 120;
-      cvs.height = img.height || 120;
+      cvs.width = img.naturalWidth || img.width || 120;
+      cvs.height = img.naturalHeight || img.height || 120;
       const ctx = cvs.getContext('2d');
       if (ctx) {
         ctx.drawImage(img, 0, 0);
@@ -130,6 +139,8 @@ export function compileFont(
 
   return font;
 }
+
+export const compileFont = compileOpenTypeFont;
 
 /**
  * Télécharge la police générée au format TrueType (.ttf)

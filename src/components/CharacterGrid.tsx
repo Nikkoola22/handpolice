@@ -8,6 +8,7 @@ interface CharacterGridProps {
   selectedCharacterId: string;
   onSelectCharacter: (charId: string) => void;
   onNavigateToDrawing: (charId: string) => void;
+  onCalibrateAllCursive?: () => void;
 }
 
 export const CharacterGrid: React.FC<CharacterGridProps> = ({
@@ -15,9 +16,11 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
   selectedCharacterId,
   onSelectCharacter,
   onNavigateToDrawing,
+  onCalibrateAllCursive,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<CharacterCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [calibratedSuccess, setCalibratedSuccess] = useState(false);
 
   // Filtrage
   const filteredCharacters = characters.filter((item) => {
@@ -63,16 +66,33 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
           ))}
         </div>
 
-        {/* Champ de recherche */}
-        <div className="relative w-full md:w-64">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher une lettre..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
-          />
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          {onCalibrateAllCursive && (
+            <button
+              onClick={() => {
+                onCalibrateAllCursive();
+                setCalibratedSuccess(true);
+                setTimeout(() => setCalibratedSuccess(false), 3000);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 whitespace-nowrap cursor-pointer shrink-0"
+              title="Calibre toutes les marges pour que les lettres s'attachent parfaitement sans espace"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{calibratedSuccess ? '✓ Lettres liées !' : 'Lier toutes les lettres'}</span>
+            </button>
+          )}
+
+          {/* Champ de recherche */}
+          <div className="relative w-full md:w-56">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher une lettre..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -115,7 +135,13 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
 
               {/* Rendu miniature du glyphe */}
               <div className="flex-1 flex items-center justify-center my-1 w-full">
-                {isDrawn ? (
+                {item.variants[0]?.bitmapDataUrl ? (
+                  <img
+                    src={item.variants[0].bitmapDataUrl}
+                    alt={item.char}
+                    className="max-h-11 max-w-full object-contain filter invert"
+                  />
+                ) : isDrawn ? (
                   <div className="text-3xl font-extrabold text-white group-hover:text-sky-300 transition-colors">
                     {item.char}
                   </div>

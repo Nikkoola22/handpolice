@@ -42,10 +42,15 @@ interface TextToken {
   text: string;
   isLigature: boolean;
   strokes?: Stroke[];
+  bitmapDataUrl?: string;
   leftMargin: number;
   rightMargin: number;
   baselineOffset: number;
   scale: number;
+  minX?: number;
+  maxX?: number;
+  entryPt?: { x: number; y: number };
+  exitPt?: { x: number; y: number };
 }
 
 export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
@@ -56,7 +61,7 @@ export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
   const [text, setText] = useState<string>(SAMPLE_TEXTS[0].text);
   const [fontSize, setFontSize] = useState<number>(34);
   const [lineHeight, setLineHeight] = useState<number>(2.0);
-  const [letterSpacing, setLetterSpacing] = useState<number>(-4); // Valeur par défaut négative pour liaison cursive
+  const [letterSpacing, setLetterSpacing] = useState<number>(-6); // Valeur par défaut pour liaison cursive sans blanc
   const [paper, setPaper] = useState<PaperType>('seyes');
   const [ink, setInk] = useState<InkColor>('blue_ink');
   const [enableRandomization, setEnableRandomization] = useState<boolean>(true);
@@ -166,6 +171,24 @@ export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
 
       if (matchedLig) {
         const v = matchedLig.variants[0];
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let entryPt: { x: number; y: number } | undefined;
+        let exitPt: { x: number; y: number } | undefined;
+
+        if (v?.strokes && v.strokes.length > 0) {
+          for (const s of v.strokes) {
+            for (const pt of s) {
+              if (pt.x < minX) minX = pt.x;
+              if (pt.x > maxX) maxX = pt.x;
+            }
+          }
+          const firstS = v.strokes[0];
+          if (firstS && firstS.length > 0) entryPt = { x: firstS[0].x, y: firstS[0].y };
+          const lastS = v.strokes[v.strokes.length - 1];
+          if (lastS && lastS.length > 0) exitPt = { x: lastS[lastS.length - 1].x, y: lastS[lastS.length - 1].y };
+        }
+
         tokens.push({
           text: matchedLig.sequence,
           isLigature: true,
@@ -174,20 +197,48 @@ export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
           rightMargin: v?.rightMargin ?? -8,
           baselineOffset: v?.baselineOffset ?? 0,
           scale: v?.scale ?? 1,
+          minX: minX !== Infinity ? minX : undefined,
+          maxX: maxX !== -Infinity ? maxX : undefined,
+          entryPt,
+          exitPt,
         });
         i += matchedLig.sequence.length;
       } else {
         const char = line[i];
         const item = charMap.get(char);
         const v = item?.variants[item.selectedVariantIndex] || item?.variants[0];
+
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let entryPt: { x: number; y: number } | undefined;
+        let exitPt: { x: number; y: number } | undefined;
+
+        if (v?.strokes && v.strokes.length > 0) {
+          for (const s of v.strokes) {
+            for (const pt of s) {
+              if (pt.x < minX) minX = pt.x;
+              if (pt.x > maxX) maxX = pt.x;
+            }
+          }
+          const firstS = v.strokes[0];
+          if (firstS && firstS.length > 0) entryPt = { x: firstS[0].x, y: firstS[0].y };
+          const lastS = v.strokes[v.strokes.length - 1];
+          if (lastS && lastS.length > 0) exitPt = { x: lastS[lastS.length - 1].x, y: lastS[lastS.length - 1].y };
+        }
+
         tokens.push({
           text: char,
           isLigature: false,
           strokes: v?.strokes,
+          bitmapDataUrl: v?.bitmapDataUrl,
           leftMargin: v?.leftMargin ?? 0,
           rightMargin: v?.rightMargin ?? -6,
           baselineOffset: v?.baselineOffset ?? 0,
           scale: v?.scale ?? 1,
+          minX: minX !== Infinity ? minX : undefined,
+          maxX: maxX !== -Infinity ? maxX : undefined,
+          entryPt,
+          exitPt,
         });
         i++;
       }
@@ -245,10 +296,32 @@ export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
             // Calcul de l'espacement pour continuité cursive
             // Une valeur négative fait glisser la lettre sous la queue de la précédente
             const spacingStyle = enableCursiveOverlap
-              ? `${letterSpacing + (tok.rightMargin || 0) * 0.08}px`
+              ? `${letterSpacing + (tok.rightMargin || 0) * 0.12}px`
               : `${letterSpacing}px`;
 
             if (!tok.strokes || tok.strokes.length === 0) {
+              if (tok.bitmapDataUrl) {
+                return (
+                  <span
+                    key={`tok-${tokIdx}`}
+                    className="inline-flex items-end relative select-none"
+                    style={{
+                      height: `${fontSize * 1.05}px`,
+                      marginRight: spacingStyle,
+                      transform: `translateY(${totalY}px) rotate(${rotationDeg}deg)`,
+                      transformOrigin: 'bottom center',
+                      zIndex: 10 + tokIdx,
+                    }}
+                  >
+                    <img
+                      src={tok.bitmapDataUrl}
+                      alt={tok.text}
+                      className="h-full w-auto max-w-none inline-block object-contain filter invert pointer-events-none"
+                    />
+                  </span>
+                );
+              }
+
               // Caractère de secours si pas encore tracé
               return (
                 <span
@@ -268,8 +341,15 @@ export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
             }
 
             // Rendu vectoriel du glyphe tracé (ou de la ligature)
-            // La largeur dépend de la longueur de la séquence
-            const tokenWidth = tok.isLigature ? fontSize * (0.6 * tok.text.length) : fontSize * 0.75;
+            // Utilise un viewBox cadré serré pour éliminer tout blanc mort et lier les lettres
+            const hasValidBounds = tok.minX !== undefined && tok.maxX !== undefined && tok.minX < tok.maxX;
+            const strokeW = hasValidBounds ? (tok.maxX! - tok.minX!) : 120;
+            const viewMinX = hasValidBounds ? tok.minX! - 4 : 0;
+            const viewW = hasValidBounds ? strokeW + 8 : 320;
+
+            const tokenWidth = tok.isLigature
+              ? Math.max(fontSize * 0.45, (viewW / 240) * fontSize * (tok.scale || 1))
+              : Math.max(fontSize * 0.18, (viewW / 240) * fontSize * (tok.scale || 1));
 
             return (
               <span
@@ -281,10 +361,11 @@ export const HandwritingPreview: React.FC<HandwritingPreviewProps> = ({
                   marginRight: spacingStyle,
                   transform: `translateY(${totalY}px) rotate(${rotationDeg}deg)`,
                   transformOrigin: 'bottom center',
+                  zIndex: 10 + tokIdx,
                 }}
               >
                 <svg
-                  viewBox="0 0 320 320"
+                  viewBox={`${viewMinX} 0 ${viewW} 320`}
                   className="w-full h-full overflow-visible"
                   style={{
                     color: inkStyles[ink].color,

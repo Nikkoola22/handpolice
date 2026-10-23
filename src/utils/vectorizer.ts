@@ -135,10 +135,10 @@ export function strokesToOutlinePath(
     path.close();
   }
 
-  // Calcul de la largeur de chasse (advanceWidth)
+  // Calcul de la largeur de chasse (advanceWidth) pour permettre le raccordement cursif
   const glyphContentWidth = Math.round((maxX - minX) * scale);
   const advanceWidth = Math.max(
-    Math.round(unitsPerEm * 0.25),
+    50,
     glyphContentWidth + leftMargin + rightMargin
   );
 
@@ -222,7 +222,7 @@ export function bitmapToOutlinePath(
 
   const glyphContentWidth = Math.round((maxX - minX) * scale);
   const advanceWidth = Math.max(
-    Math.round(unitsPerEm * 0.25),
+    50,
     glyphContentWidth + leftMargin + rightMargin
   );
 

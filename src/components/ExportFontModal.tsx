@@ -49,7 +49,7 @@ export const ExportFontModal: React.FC<ExportFontModalProps> = ({
         descender: -200,
       };
 
-      const font = compileFont(characters, ligatures, metadata);
+      const font = await compileFont(characters, ligatures, metadata);
       const safeName = (fontName || 'ma-police').toLowerCase().replace(/\s+/g, '-');
       exportFontToFile(font, `${safeName}.ttf`);
 
